@@ -1,0 +1,75 @@
+It is API const express = require("express");
+// const multer = require("multer");
+const FilesModel = require("./models/fileSchema");
+//const cors = require("cors");
+const path = require("path");
+const validator = require('validator');
+//const fs = require("fs");
+const aws = require("aws-sdk");
+const multer = require("multer");
+const {modifyTextractData} = require("./util");
+const { modifyinsuranceOCR } = require('./util');
+ 
+const config = {
+  awsAccesskeyID: "AKIAWO44VTNPEEVYDQF5",
+  awsSecretAccessKey: "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",
+  awsRegion: "ap-south-1",
+};
+
+aws.config.update({
+  accessKeyId: config.awsAccesskeyID,
+  secretAccessKey: config.awsSecretAccessKey,
+  region: config.awsRegion,
+});
+
+
+const textract = new aws.Textract();
+const textractScan = async (buffer) => {
+  const params = {
+    Document: {
+      Bytes: buffer,
+    },
+   // FeatureTypes: ["FORMS"],
+  };
+  try {
+    const request = textract.analyzeExpense(params);
+    const data = await request.promise();
+    console.log("data", data.ExpenseDocuments);
+    return data;
+  }
+  catch (err) {
+    console.log("Error in Textract scan:", err);
+    throw err;
+  }
+};
+const app = express();  ,,,app.post("/insuranceOCR",multer().any(),async (req,res) => {
+  try {
+    if (!Array.isArray(req.files) && !req.files?.length) {
+      return res.status(402).send({status:false,message:"Please send a file"})
+    }
+ 
+    const dataFile = req.files[0];
+    const data = await textractScan(dataFile.buffer);
+    console.log("Extracted data:", data);
+    console.log("newData", JSON.stringify(Object.keys(data)))
+    const newData = modifyinsuranceOCR(data);
+    console.log("newData---->",newData)
+    return res.send({status:true,data:newData})
+
+    //base64 data
+    //   if(!req.body || !req.body.base64){
+    //   return res.status(400).send({status:false, message: "Please send a file" })
+    // }
+    // const base64Data = req.body.base64
+    // const decodedData = Buffer.from(base64Data, 'base64')
+
+    // const data = await textractScan(decodedData)
+    // console.log("Extracted Data--->",data)
+    // const newData = modifyinsuranceOCR(data)
+    // console.log("Modified Data", newData)
+    // return res.send({status: true , data:newData })
+  } catch(err) {
+    console.log("err",err)
+    return res.status(500).send({ status: false, message: "Internal Server Error", error: err.message });
+  }
+})
